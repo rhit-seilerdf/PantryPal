@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Material+Icons">
+  <link rel="stylesheet" href="styles/bootstrap-material-design.min.css">
+  <link rel="stylesheet" href="styles/main.css">
+  <title>PantryPal</title>
+</head>
+
+<body>
+  
+  <div class="bmd-layout-container bmd-drawer-f-l bmd-drawer-overlay">
+    <header class="bmd-layout-header">
+    <div class="navbar navbar-dark bg-faded fixed-top justify-content-start">
+        <button class="navbar-toggler" type="button" data-toggle="drawer" data-target="#dw-s2">
+        <span class="sr-only">Toggle drawer</span>
+        <i class="material-icons">menu</i>
+        </button>
+        <a class="navbar-brand" href="/home.html">&nbsp;&nbsp;PantryPal</a>
+
+    </div>
+    </header>
+    <div id="dw-s2" class="bmd-layout-drawer bg-faded">
+    <header>
+        <a class="navbar-brand">Your Pantry</a>
+    </header>
+    <ul class="list-group">
+      <a id="menuPantry" class="list-group-item"><i class="material-icons">shelves</i>Pantry</a>
+      <a id="menuSearch" class="list-group-item"><i class="material-icons">search</i>Search</a>
+      <a id="menuProfile" class="list-group-item"> <i class="material-icons">person</i>Profile</a>
+      <a id="menuSignOut" class="list-group-item"><i  class="material-icons">logout</i>Logout</a>
+
+    </ul>
+
+
+
+    </div>
+
+  <div id="pantryPage" class="container page-container">
+    <div id="mainText">
+      <strong class="titleText">My Pantry</strong>
+      <hr>
+
+      <button id="addButton" type="button" style="background-color: #34E0A1; color: #35414B;"
+        class="btn box-shadow--2dp" data-toggle="modal" data-target="#pantryModalPopup">Add New Pantry Item</button>
+
+      <hr>
+
+      <div id="ingredientContainer" class="row justify-content-left"></div>
+
+    </div>
+
+    <!-- Profile Modal -->
+    <div class="modal fade" id="profileModalPopup" tabindex="-1" role="dialog">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 id="userName" class="modal-title">Profile</h5>
+          </div>
+          <div class="modal-body">
+            <div>
+              Intolerances
+            </div>
+            <div class="autocomplete" style="width:300px;">
+              <input id="myIntolerancesInput" type="text" placeholder="Name of Intolerances">
+            </div>
+            <div id="intolerancesContainer"></div>
+
+          </div>
+          <div class="modal-footer">
+            <button id="applyButton" type="button" class="btn btn-secondary" style="display: none;">apply</button>
+            <button id="dismiss" type="button" class="btn btn-primary" data-dismiss="modal">Dismiss</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- End Profile Modal -->
+
+    <!-- Modal -->
+    <div class="modal fade" id="menuModalPopup" tabindex="-1" role="dialog">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Settings</h5>
+          </div>
+          <div class="modal-body">
+
+            <div id="toggleForm" class="form-group  bmd-form-group">
+              <input type="checkbox" id="switch" class="checkbox" />
+              <label id="darkToggleSwitch" for="switch" class="toggle">
+              </label>
+              Dark Mode
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button id="logoutButton" type="button" class="btn btn-secondary">Log Out</button>
+            <button id="dismiss" type="button" class="btn btn-primary" data-dismiss="modal">Dismiss</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- End Modal -->
+
+    <!-- Add Pantry Item Modal -->
+    <div class="modal fade" id="pantryModalPopup" tabindex="-1" role="dialog">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Add Pantry Item</h5>
+          </div>
+          <form autocomplete="off">
+            <div class="modal-body">
+              <div class="autocomplete" style="width:300px;">
+                <input id="myInput" type="text" placeholder="Name of Ingredient">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button id="applyAddButton" type="button" class="btn btn-secondary" data-dismiss="modal">ADD</button>
+              <button id="dismiss" type="button" class="btn btn-primary" data-dismiss="modal">CANCEL</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <!-- End Add Pantry Item Modal -->
+
+    <!-- Remove Pantry Item Modal -->
+    <div class="modal fade" id="removeModalPopup" tabindex="-1" role="dialog">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 id="removeTitle" class="modal-title">Edit Pantry Item</h5>
+          </div>
+          <div class="modal-body">
+          </div>
+          <div class="modal-footer">
+            <button id="applyRemoveButton" type="button" class="btn btn-secondary" data-dismiss="modal">REMOVE</button>
+            <button id="dismiss" type="button" class="btn btn-primary" data-dismiss="modal">CANCEL</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- End Remove Pantry Item Modal -->
+
+
+  </div>
+  <script src="scripts/jquery.min.js"></script>
+  <script src="scripts/popper.js"></script>
+  <script src="scripts/bootstrap-material-design.js"></script>
+  <script>
+    $("body").bootstrapMaterialDesign();
+  </script>
+  <script src="/__/firebase/7.18.0/firebase-app.js"></script>
+  <script src="/__/firebase/7.18.0/firebase-analytics.js"></script>
+  <script src="/__/firebase/7.18.0/firebase-auth.js"></script>
+  <script src="/__/firebase/7.18.0/firebase-firestore.js"></script>
+  <script src="scripts/rosefire.min.js"></script>
+  <script src="/__/firebase/init.js"></script>
+  <script src="scripts/main.js"></script>
+</body>
+
+</html>

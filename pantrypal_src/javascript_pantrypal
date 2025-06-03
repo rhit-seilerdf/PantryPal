@@ -1,0 +1,975 @@
+var rhit = rhit || {};
+
+// Global Variables
+rhit.FB_COLLECTION_USERS = "Users";
+rhit.FB_KEY_NAME = "name";
+rhit.FB_KEY_MODE = "mode";
+rhit.FB_KEY_PANTRY = "pantry";
+rhit.FB_KEY_INTOLERANCES = "intolerances";
+rhit.FB_KEY_LIKED_RECIPES = "likedRecipes";
+rhit.fbAuthManager = null;
+rhit.fbUserManager = null;
+rhit.apiKey = 'e76e7aa2bdmsh01bfdccd484878ep1889a4jsn13d23c9f01d0';
+
+const options = {
+	method: 'GET',
+	headers: {
+		'X-RapidAPI-Key': 'e76e7aa2bdmsh01bfdccd484878ep1889a4jsn13d23c9f01d0',
+		'X-RapidAPI-Host': 'spoonacular-recipe-food-nutrition-v1.p.rapidapi.com'
+	}
+};
+const number = 12;
+
+//From: https://stackoverflow.com/questions/494143/creating-a-new-dom-element-from-an-html-string-using-built-in-dom-methods-or-pro/35385518#35385518
+function htmlToElement(html) {
+	var template = document.createElement('template');
+	html = html.trim();
+	template.innerHTML = html;
+	return template.content.firstChild;
+}
+
+//From: https://www.w3schools.com/howto/howto_js_autocomplete.asp
+function ingredientAutocomplete(inp, mode) {
+	var currentFocus;
+
+	inp.addEventListener("input", function (e) {
+		var a, b, i, val = this.value;
+		/*close any already open lists of autocompleted values*/
+		closeAllLists();
+		if (!val) {
+			return false;
+		}
+		currentFocus = -1;
+		/*create a DIV element that will contain the items (values):*/
+		a = document.createElement("DIV");
+		a.setAttribute("id", this.id + "autocomplete-list");
+		a.setAttribute("class", "autocomplete-items");
+		/*append the DIV element as a child of the autocomplete container:*/
+		this.parentNode.appendChild(a);
+		if (mode == 0) {
+			console.log("in if");
+			if (document.querySelector("#myIntolerancesInput").value == '') {
+				document.querySelector("#applyButton").style.display = "none";
+			} else {
+				document.querySelector("#applyButton").style.display = "block";
+			}
+			for (i = 0; i < intList.length; i++) {
+				if (intList[i].substr(0, val.length).toUpperCase() == val.toUpperCase()) {
+					b = document.createElement("DIV");
+					b.innerHTML = intList[i];
+					b.innerHTML += "<input type='hidden' value='" + intList[i] + "'>";
+					b.addEventListener("click", function (e) {
+						inp.value = this.getElementsByTagName("input")[0].value;
+						closeAllLists();
+					});
+					a.appendChild(b);
+				}
+			}
+		} else if (mode == 1) {
+			fetch(`https://spoonacular-recipe-food-nutrition-v1.p.rapidapi.com/food/ingredients/search?query=${inp.value}&number=5&addChildren=false&metaInformation=false`, options)
+				.then(response => response.json())
+				.then(response => {
+
+					for (i = 0; i < response.results.length; i++) {
+						b = document.createElement("DIV");
+						b.innerHTML = response.results[i].name;
+						b.innerHTML += "<input type='hidden' value='" + response.results[i].name + "'>";
+						b.addEventListener("click", function (e) {
+							inp.value = this.getElementsByTagName("input")[0].value;
+							closeAllLists();
+						});
+						a.appendChild(b);
+					}
+				})
+				.catch(err => console.error(err));
+		}
+	});
+
+	inp.addEventListener("keydown", function (e) {
+		var x = document.getElementById(this.id + "autocomplete-list");
+		if (x) x = x.getElementsByTagName("div");
+		if (e.keyCode == 40) {
+			/*If the arrow DOWN key is pressed,
+			increase the currentFocus variable:*/
+			currentFocus++;
+			/*and and make the current item more visible:*/
+			addActive(x);
+		} else if (e.keyCode == 38) { //up
+			/*If the arrow UP key is pressed,
+			decrease the currentFocus variable:*/
+			currentFocus--;
+			/*and and make the current item more visible:*/
+			addActive(x);
+		} else if (e.keyCode == 13) {
+			/*If the ENTER key is pressed, prevent the form from being submitted,*/
+			e.preventDefault();
+			if (currentFocus > -1) {
+				/*and simulate a click on the "active" item:*/
+				if (x) x[currentFocus].click();
+			}
+		}
+	});
+
+	function addActive(x) {
+		/*a function to classify an item as "active":*/
+		if (!x) return false;
+		/*start by removing the "active" class on all items:*/
+		removeActive(x);
+		if (currentFocus >= x.length) currentFocus = 0;
+		if (currentFocus < 0) currentFocus = (x.length - 1);
+		/*add class "autocomplete-active":*/
+		x[currentFocus].classList.add("autocomplete-active");
+	}
+
+	function removeActive(x) {
+		for (var i = 0; i < x.length; i++) {
+			x[i].classList.remove("autocomplete-active");
+		}
+	}
+
+	function closeAllLists(elmnt) {
+		var x = document.getElementsByClassName("autocomplete-items");
+		for (var i = 0; i < x.length; i++) {
+			if (elmnt != x[i] && elmnt != inp) {
+				x[i].parentNode.removeChild(x[i]);
+			}
+		}
+	}
+
+	document.addEventListener("click", function (e) {
+		closeAllLists(e.target);
+	});
+}
+
+// Classes
+rhit.MenuController = class {
+	constructor() {
+		const menuSignOutItem = document.querySelector("#logoutButton");
+		if (menuSignOutItem) {
+			menuSignOutItem.addEventListener("click", (event) => {
+				rhit.fbAuthManager.signOut();
+			});
+		}
+
+		const profileNameItem = document.querySelector("#userName");
+		if (profileNameItem) {
+			firebase.firestore().collection(rhit.FB_COLLECTION_USERS).doc(rhit.fbAuthManager.uid).onSnapshot((doc) => {
+				if (doc.data().name) {
+					profileNameItem.innerHTML = doc.data().name;
+				}
+			});
+		}
+
+		const darkModeItem = document.querySelector("#darkToggleSwitch");
+		if (darkModeItem) {
+			rhit.fbUserManager.beginListening(rhit.fbAuthManager.uid, () => {
+				if (rhit.fbUserManager.mode == "dark") {
+					document.querySelector("#switch").checked = true;
+				}
+			});
+
+			darkModeItem.addEventListener("click", (event) => {
+				if (document.querySelector("#switch").checked) {
+					console.log("light mode on");
+					rhit.fbUserManager.updateMode("light");
+				} else {
+					console.log("dark mode on")
+					rhit.fbUserManager.updateMode("dark");
+				}
+			});
+		}
+	}
+}
+
+
+
+rhit.LoginPageController = class {
+	constructor() {
+		// document.querySelector("#rosefireButton").onclick = (event) => {
+		// 	rhit.fbAuthManager.signIn();
+		// };
+
+		rhit.fbAuthManager.startFirebaseUI();
+	}
+}
+
+rhit.PantryPageController = class {
+
+	constructor() {
+		this.lastClickedIngredient = -1;
+
+		this._loadIngredients();
+		this._setupRedirection();
+
+		ingredientAutocomplete(document.getElementById("myInput"), 1);
+
+
+		document.querySelector("#applyAddButton").onclick = (event) => {
+			rhit.fbUserManager.addNewPantryItem(document.getElementById("myInput").value);
+			this._loadIngredients();
+		}
+		document.querySelector("#addButton").onclick = (event) => {
+			document.querySelector("#myInput").value = "";
+		}
+		document.querySelector("#applyRemoveButton").onclick = (event) => {
+			rhit.fbUserManager.removePantryItem(this.lastClickedIngredient);
+			this._loadIngredients();
+		}
+	}
+
+	_setupRedirection() {
+        document.getElementById("menuPantry").addEventListener("click", () => {
+            window.location.href = `/pantry.html`;
+        });
+
+        document.getElementById("menuSearch").addEventListener("click", () => {
+			window.location.href = `/recipes.html`;
+        });
+
+        document.getElementById("menuProfile").addEventListener("click", () => {
+			window.location.href =  `/profile.html`;
+        });
+
+        document.getElementById("menuSignOut").addEventListener("click", () => {
+            rhit.fbAuthManager.signOut();
+        });
+    }
+
+	_loadIngredients() {
+		rhit.fbUserManager.beginListening(rhit.fbAuthManager.uid, () => {
+			let ingredients = rhit.fbUserManager.pantry;
+			const ingredientList = document.querySelector("#ingredientContainer");
+			ingredientList.innerHTML = "";
+			for (let i = 0; i < ingredients.length; i++) {
+				const newCard = this._createIngredientCard(ingredients[i], i);
+				ingredientList.appendChild(newCard);
+			}
+
+			let pantryList = document.querySelectorAll(".pantryListItem")
+			for (let i = 0; i < pantryList.length; i++) {
+				pantryList[i].onclick = (event) => {
+					this.lastClickedIngredient = event.target.dataset.value;
+				}
+			}
+		});
+	}
+
+	_createIngredientCard(response, i) {
+		return htmlToElement(`
+		<div class="ingredientList col-6 col-md-3 col-lg-2">
+			<div data-value="${i}" class="card pantryListItem" data-toggle="modal" data-target="#removeModalPopup">
+				<img data-value="${i}" class="ingredientImage card-img-top" src="https://spoonacular.com/cdn/ingredients_100x100/${response.image}" alt="${response.name}"></img>
+				<div data-value="${i}" class="card-body">
+					<h5 data-value="${i}" class="card-title" style="font-weight: 500;">${response.name}</h5>
+				</div>
+			</div>
+		</div>
+		`);
+	}
+}
+
+rhit.HomePageController = class {
+	constructor() {
+		fetch('https://spoonacular-recipe-food-nutrition-v1.p.rapidapi.com/recipes/random?number=1', options)
+			.then(response => response.json())
+			.then(response => {
+				console.log("Recieved", response);
+				document.querySelector("#randomRecipe").href = response.recipes[0].sourceUrl;
+				document.querySelector(".recipeImage").src = response.recipes[0].image;
+				document.querySelector(".recipeImage").alt = response.recipes[0].title;
+				document.querySelector("#recipeTitle").innerHTML = response.recipes[0].title;
+			})
+			.catch(err => console.error(err));
+			this._setupRedirection() 
+	}
+	_setupRedirection() {
+        document.getElementById("menuPantry").addEventListener("click", () => {
+            window.location.href = `/pantry.html`;
+        });
+
+        document.getElementById("menuSearch").addEventListener("click", () => {
+			window.location.href = `/recipes.html`;
+        });
+
+        document.getElementById("menuProfile").addEventListener("click", () => {
+			window.location.href =  `/profile.html`;
+        });
+
+        document.getElementById("menuSignOut").addEventListener("click", () => {
+            rhit.fbAuthManager.signOut();
+        });
+    }
+	
+}
+
+rhit.ProfilePageController = class {
+    constructor() {
+        this.likedRecipeList = document.querySelector("#likedRecipeContainer");
+        this.loadLikedRecipes();
+        this._setupRedirection();
+    }
+
+	_setupRedirection() {
+        document.getElementById("menuPantry").addEventListener("click", () => {
+            window.location.href = `/pantry.html`;
+        });
+
+        document.getElementById("menuSearch").addEventListener("click", () => {
+            window.location.href = `/recipes.html`;
+        });
+
+        document.getElementById("menuProfile").addEventListener("click", () => {
+            window.location.href = `/profile.html`;
+        });
+
+        document.getElementById("menuSignOut").addEventListener("click", () => {
+            rhit.fbAuthManager.signOut();
+        });
+    }
+
+    async loadLikedRecipes() {
+        const updateLikedRecipes = async () => {
+            console.log("Updating liked recipes...");
+            let likedRecipes = await rhit.fbUserManager.getLikedRecipes();
+            this.likedRecipeList.innerHTML = ""; // Clear the list before appending new items
+
+            const renderedRecipeIds = new Set(); // To track rendered recipes and avoid duplicates
+
+            for (let recipe of likedRecipes) {
+                const detailedRecipe = await rhit.fbUserManager.getRecipeInformation(recipe.id);
+                console.log('Detailed Recipe:', detailedRecipe); // Log each recipe
+
+                if (detailedRecipe && detailedRecipe.sourceUrl && !renderedRecipeIds.has(recipe.id)) {
+                    recipe.sourceUrl = detailedRecipe.sourceUrl;
+                    const card = this._createCard(recipe);
+                    this.likedRecipeList.appendChild(card);
+                    renderedRecipeIds.add(recipe.id); // Add to the set of rendered recipes
+                } else {
+                    console.error('Recipe source URL is undefined or duplicate:', detailedRecipe);
+                }
+            }
+        };
+
+        rhit.fbUserManager.beginListening(rhit.fbAuthManager.uid, updateLikedRecipes);
+    }
+
+    _createCard(recipe) {
+        const card = htmlToElement(`
+            <div class="recipeList col-12 col-md-6 col-lg-4">
+                <div class="card">
+                    <img class="recipeImage card-img-top" src="${recipe.image}" alt="${recipe.title}"></img>
+                    <div class="card-body">
+                        <h5 class="card-title" style="font-weight: 500;">${recipe.title}</h5>
+                    </div>
+                    <div class="card-footer">
+                        <button class="likeButton btn btn-primary" data-id="${recipe.id}">
+                            <i class="material-icons">favorite</i>
+                        </button>
+                        <a class="btn btn-primary" href="${recipe.sourceUrl}" target="_blank">View Recipe</a>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        card.querySelector('.likeButton').onclick = async (event) => {
+            await rhit.fbUserManager.unlikeRecipe(recipe.id);
+            this.loadLikedRecipes(); // Refresh the list to reflect changes
+        };
+
+        return card;
+    }
+}
+
+rhit.RecipePageController = class {
+    constructor() {
+        this.recipeList = document.querySelector("#recipeContainer");
+        this.loadPantryItems();
+        this._setupRedirection();
+        document.querySelector("#submitButton").onclick = (event) => {
+            this.fetchRecipes();
+        };
+    }
+
+    _setupRedirection() {
+        document.getElementById("menuPantry").addEventListener("click", () => {
+            window.location.href = `/pantry.html`;
+        });
+
+        document.getElementById("menuSearch").addEventListener("click", () => {
+            window.location.href = `/recipes.html`;
+        });
+
+        document.getElementById("menuProfile").addEventListener("click", () => {
+            window.location.href = `/profile.html`;
+        });
+
+        document.getElementById("menuSignOut").addEventListener("click", () => {
+            rhit.fbAuthManager.signOut();
+        });
+    }
+
+    loadPantryItems() {
+        const pantryForm = document.querySelector("#pantryForm");
+        const updatePantryItems = () => {
+            let pantry = rhit.fbUserManager.pantry;
+            pantryForm.innerHTML = "";
+            pantry.forEach(item => {
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.id = item.id;
+                checkbox.value = item.name;
+                checkbox.name = "pantryItems";
+
+                const label = document.createElement("label");
+                label.htmlFor = item.id;
+                label.appendChild(document.createTextNode(item.name));
+
+                pantryForm.appendChild(checkbox);
+                pantryForm.appendChild(label);
+                pantryForm.appendChild(document.createElement("br"));
+            });
+        };
+
+        rhit.fbUserManager.beginListening(rhit.fbAuthManager.uid, updatePantryItems);
+    }
+
+    async fetchRecipes() {
+        const selectedItems = Array.from(document.querySelectorAll('input[name="pantryItems"]:checked')).map(cb => cb.value);
+        const includeIngredients = selectedItems.join(',');
+        const url = `https://spoonacular-recipe-food-nutrition-v1.p.rapidapi.com/recipes/findByIngredients?ingredients=${includeIngredients}&number=${number}`;
+
+        try {
+            const response = await fetch(url, options);
+            const data = await response.json();
+            console.log("API Response: ", data); // Debugging line
+            this.recipeList.innerHTML = "";
+
+            for (let recipe of data) {
+                const detailedRecipe = await rhit.fbUserManager.getRecipeInformation(recipe.id);
+                console.log('Detailed Recipe:', detailedRecipe); // Log each recipe
+
+                if (detailedRecipe && detailedRecipe.sourceUrl) {
+                    recipe.sourceUrl = detailedRecipe.sourceUrl;
+                    const card = this._createCard(recipe);
+                    this.recipeList.appendChild(card);
+                } else {
+                    console.error('Recipe source URL is undefined:', detailedRecipe);
+                }
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    _createCard(recipe) {
+        const isLiked = rhit.fbUserManager.isRecipeLiked(recipe.id);
+        const card = htmlToElement(`
+            <div class="recipeList col-12 col-md-6 col-lg-4">
+                <div class="card">
+                    <img class="recipeImage card-img-top" src="${recipe.image}" alt="${recipe.title}"></img>
+                    <div class="card-body">
+                        <h5 class="card-title" style="font-weight: 500;">${recipe.title}</h5>
+                    </div>
+                    <div class="card-footer">
+                        <button class="likeButton btn btn-primary ${isLiked ? 'liked' : ''}" data-id="${recipe.id}">
+                            <i class="material-icons">${isLiked ? 'favorite' : 'favorite_border'}</i>
+                        </button>
+                        <a class="btn btn-primary" href="${recipe.sourceUrl}" target="_blank">View Recipe</a>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        card.querySelector('.likeButton').onclick = async (event) => {
+            if (isLiked) {
+                await rhit.fbUserManager.unlikeRecipe(recipe.id);
+                event.target.classList.remove('liked');
+                event.target.innerHTML = '<i class="material-icons">favorite_border</i>';
+            } else {
+                await rhit.fbUserManager.likeRecipe(recipe);
+                event.target.classList.add('liked');
+                event.target.innerHTML = '<i class="material-icons">favorite</i>';
+            }
+            this.fetchRecipes(); // Optionally refresh the list to reflect changes
+        };
+
+        return card;
+    }
+}
+
+
+rhit.FbAuthManager = class {
+	constructor() {
+		this._user = null;
+		this._name = "";
+	
+		this._mode = "light";
+	}
+
+	beginListening(changeListener) {
+		firebase.auth().onAuthStateChanged((user) => {
+			this._user = user;
+			
+			changeListener();
+		});
+	}
+
+	signIn() {
+		// console.log("Sign in using Rosefire");
+		Rosefire.signIn("3def154b-0837-4ef3-be25-4edb6b9bce2a", (err, rfUser) => {
+			if (err) {
+				console.log("Rosefire error!", err);
+				return;
+			}
+
+			this._name = rfUser.name;
+
+			firebase.auth().signInWithCustomToken(rfUser.token).catch((error) => {
+				const errorCode = error.code;
+				const errorMessage = error.message;
+
+				if (errorCode === 'auth/invalid-custom-token') {
+					alert('The token you provided is not valid.');
+				} else {
+					console.log("Custom auth error", errorCode, errorMessage);
+				}
+			});
+		});
+	}
+
+	signOut() {
+		firebase.auth().signOut().catch((error) => {
+			console.log("Sign out error");
+		});
+	}
+
+	startFirebaseUI = function () {
+		var uiConfig = {
+			signInSuccessUrl: '/',
+			signInOptions: [
+				firebase.auth.GoogleAuthProvider.PROVIDER_ID,
+				firebase.auth.EmailAuthProvider.PROVIDER_ID,
+				firebase.auth.PhoneAuthProvider.PROVIDER_ID
+			],
+		};
+		const ui = new firebaseui.auth.AuthUI(firebase.auth());
+		ui.start('#firebaseui-auth-container', uiConfig);
+	}
+
+	get uid() {
+		return this._user.uid;
+	}
+
+	get isSignedIn() {
+		return !!this._user;
+	}
+
+	get name() {
+		return this._name || this._user.displayName;
+	}
+
+	get mode() {
+		return this._mode;
+	}
+}
+
+rhit.initializePage = function () {
+	if (document.querySelector("#loginPage")) {
+		console.log("You are on the login page.");
+		new rhit.LoginPageController();
+	}
+
+	if (document.querySelector("#homePage")) {
+		console.log("You are on the home page.");
+		new rhit.HomePageController();
+		new rhit.MenuController();
+		new rhit.ProfilePageController();
+	}
+
+
+	if (document.querySelector("#recipePage")) {
+		console.log("You are on the recipe page.");
+		new rhit.MenuController();
+		
+		new rhit.RecipePageController();
+	}
+
+	if (document.querySelector("#pantryPage")) {
+		console.log("You are on the pantry page.");
+		new rhit.PantryPageController();
+		new rhit.MenuController();
+	}
+
+	if (document.querySelector("#profilePage")) {
+		console.log("You are on the recipe page.");
+		new rhit.MenuController();
+		new rhit.ProfilePageController();
+		
+	}
+
+	if (document.querySelector("#pantryPage") || document.querySelector("#homePage") || document.querySelector("#recipePage")) {
+		rhit.fbUserManager.beginListening(rhit.fbAuthManager.uid, () => {
+			if (rhit.fbUserManager.mode == "dark") {
+				document.body.id = "dark";
+			} else {
+				document.body.id = "light";
+			}
+		});
+
+		//not quite sure if i need this
+	}
+	
+
+}
+
+rhit.checkForRedirects = function () {
+	if (document.querySelector("#loginPage") && rhit.fbAuthManager.isSignedIn) {
+		window.location.href = "/home.html";
+	}
+
+	if (!document.querySelector("#loginPage")  && !rhit.fbAuthManager.isSignedIn) {
+		window.location.href = "/";
+	}
+}
+
+rhit.createUserObjectIfNeeded = function () {
+	return new Promise((resolve, reject) => {
+		if (!rhit.fbAuthManager.isSignedIn) {
+			// console.log("No user, so no User check needed");
+			resolve(false);
+			return;
+		}
+
+
+		// TODO: Figure out this segment of code
+		if (!document.querySelector("#loginPage") && !document.querySelector("#homePage")) {
+			// console.log("Not on login page, so no User check needed");
+			resolve(false);
+			return;
+		}
+
+		// console.log("Checking user");
+		rhit.fbUserManager.addNewUserMaybe(
+			rhit.fbAuthManager.uid,
+			rhit.fbAuthManager.name,
+			rhit.fbAuthManager.mode
+			// , rhit.fbAuthManager.pantry
+		).then((isUserNew) => {
+			resolve(isUserNew);
+		});
+	});
+}
+
+
+rhit.FbUserManager = class {
+	constructor() {
+		this._collectionRef = firebase.firestore().collection(rhit.FB_COLLECTION_USERS);
+		this._document = null;
+		this._unsubscribe = null;
+		this.likedRecipes = []; 
+	}
+
+	addNewUserMaybe(uid, name, mode) {
+		const userRef = this._collectionRef.doc(uid);
+
+		return userRef.get().then((doc) => {
+			if (doc.exists) {
+				console.log("User already exists:", doc.data());
+				return false;
+			} else {
+				console.log("Creating this user!");
+
+				return userRef.set({
+					[rhit.FB_KEY_NAME]: name,
+					[rhit.FB_KEY_MODE]: mode,
+					[rhit.FB_KEY_PANTRY]: [],
+					[rhit.FB_KEY_INTOLERANCES]: [],
+					[rhit.FB_KEY_LIKED_RECIPES]: [] 
+				})
+					.then(function () {
+						return true;
+					})
+					.catch(function (error) {
+						console.log("Error writing document: ", error);
+					});
+			}
+		}).catch(function (error) {
+			console.log("Error getting document:", error);
+		});
+	}
+
+	async likeRecipe(recipe) {
+        const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+        try {
+            const likedRecipes = (await this.getLikedRecipes()).filter(r => r.id !== recipe.id);
+            likedRecipes.push(recipe);
+            await userRef.update({ likedRecipes });
+            console.log(`Liked recipe: ${recipe.title}`);
+        } catch (error) {
+            console.error("Error liking recipe:", error);
+        }
+    }
+
+    async unlikeRecipe(recipeId) {
+        const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+        try {
+            const likedRecipes = (await this.getLikedRecipes()).filter(r => r.id !== recipeId);
+            await userRef.update({ likedRecipes });
+            console.log(`Unliked recipe with ID: ${recipeId}`);
+        } catch (error) {
+            console.error("Error unliking recipe:", error);
+        }
+    }
+
+
+	beginListening(uid, changeListener) {
+		const userRef = this._collectionRef.doc(uid);
+
+		this._unsubscribe = userRef.onSnapshot((doc) => {
+			if (doc.exists) {
+				this._document = doc;
+				this.likedRecipes = doc.data().likedRecipes || []; 
+				changeListener();
+			} else {
+				console.log("No User!");
+			}
+		});
+	}
+	async getRecipeInformation(recipeId) {
+        const url = `https://spoonacular-recipe-food-nutrition-v1.p.rapidapi.com/recipes/${recipeId}/information`;
+        try {
+            const response = await fetch(url, options);
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error("Error getting recipe information:", error);
+            return null;
+        }
+    }
+
+	updateMode(mode) {
+		const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+		userRef.update({
+			[rhit.FB_KEY_MODE]: mode
+		})
+			.then(() => {
+				console.log(`Mode updated to ${mode}!`);
+			})
+			.catch(function (error) {
+				console.log("Error adding document: ", error);
+			});
+	}
+
+	addNewPantryItem(ingredient) {
+		fetch(`https://spoonacular-recipe-food-nutrition-v1.p.rapidapi.com/food/ingredients/search?query=${ingredient}&addChildren=false&metaInformation=false&number=1`, options)
+			.then(response => response.json())
+			.then(response => {
+				if (response.results.length > 0) {
+					const temp = this.pantry;
+					let newItem = true;
+					for (let i = 0; i < temp.length; i++) {
+						if (response.results[0].id == temp[i].id) {
+							newItem = false;
+						}
+					}
+
+					if (newItem == true) {
+						console.log("Recieved", response.results[0]);
+
+						const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+						temp.push(response.results[0]);
+						userRef.update({
+							[rhit.FB_KEY_PANTRY]: temp
+						})
+							.then(() => {
+								console.log(`Added ${response.results[0].name} to pantry!`);
+							})
+							.catch(function (error) {
+								console.log("Error adding document: ", error);
+							});
+					}
+				}
+			})
+			.catch(err => console.error(err));
+	}
+
+	addNewIntolerance(intolerance) {
+		if (intolerance != '' && intList.includes(intolerance)) {
+			const temp = this.intolerances;
+			let newItem = true;
+			for (let i = 0; i < temp.length; i++) {
+				if (intolerance == temp[i]) {
+					newItem = false;
+				}
+			}
+			if (newItem == true) {
+				console.log("Recieved", intolerance);
+
+				const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+				temp.push(intolerance);
+				userRef.update({
+					[rhit.FB_KEY_INTOLERANCES]: temp
+				})
+					.then(() => {
+						console.log(`Added ${intolerance} to intolerances!`);
+					})
+					.catch(function (error) {
+						console.log("Error adding document: ", error);
+					});
+			}
+			document.querySelector("#myIntolerancesInput").value = '';
+		}
+	}
+
+	removeIntolerance(index) {
+		if (index > -1) {
+			const temp = this.intolerances;
+			const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+			temp.splice(index, 1);
+			userRef.update({
+				[rhit.FB_KEY_INTOLERANCES]: temp
+			})
+				.then(() => {
+					console.log(`Removed an intolerance!`);
+				})
+				.catch(function (error) {
+					console.log("Error editing document: ", error);
+				});
+		}
+	}
+
+	removePantryItem(index) {
+		console.log("UNLIKING RECIPE");
+		if (index > -1) {
+			const temp = this.pantry;
+			const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+			temp.splice(index, 1);
+			userRef.update({
+				[rhit.FB_KEY_PANTRY]: temp
+			})
+				.then(() => {
+					console.log(`Removed an item from pantry!`);
+				})
+				.catch(function (error) {
+					console.log("Error editing document: ", error);
+				});
+		}
+	}
+
+	addLikedRecipe(recipe) {
+        console.log("LIKING RECIPE");
+        const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+        userRef.get().then((doc) => {
+            if (doc.exists) {
+                const likedRecipes = doc.data().likedRecipes || [];
+                // Ensure the recipe object contains all necessary fields
+                likedRecipes.push({
+                    id: recipe.id,
+                    title: recipe.title,
+                    image: recipe.image,
+                    sourceUrl: recipe.sourceUrl
+                });
+                userRef.update({
+                    [rhit.FB_KEY_LIKED_RECIPES]: likedRecipes
+                })
+                .then(() => {
+                    console.log(`Added ${recipe.title} to liked recipes!`);
+                })
+                .catch(error => {
+                    console.log("Error adding liked recipe: ", error);
+                });
+            }
+        }).catch(error => {
+            console.log("Error getting document: ", error);
+        });
+    }
+
+	removeLikedRecipe(recipeId) {
+		const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+		userRef.get().then((doc) => {
+			if (doc.exists) {
+				let likedRecipes = doc.data().likedRecipes || [];
+				likedRecipes = likedRecipes.filter(recipe => recipe.id !== recipeId);
+				userRef.update({
+					[rhit.FB_KEY_LIKED_RECIPES]: likedRecipes
+				})
+					.then(() => {
+						console.log(`Removed recipe with ID ${recipeId} from liked recipes!`);
+					})
+					.catch(error => {
+						console.log("Error removing liked recipe: ", error);
+					});
+			}
+		}).catch(error => {
+			console.log("Error getting document: ", error);
+		});
+	}
+
+	async getLikedRecipes() {
+        const userRef = this._collectionRef.doc(rhit.fbAuthManager.uid);
+        try {
+            const doc = await userRef.get();
+            if (doc.exists) {
+                return doc.data().likedRecipes || [];
+            } else {
+                console.log("No such document!");
+                return [];
+            }
+        } catch (error) {
+            console.error("Error getting liked recipes:", error);
+            return [];
+        }
+    }
+
+
+	isRecipeLiked(recipeId) {
+		return this.likedRecipes.some(recipe => recipe.id === recipeId);
+	}
+
+	stopListening() {
+		this._unsubscribe();
+	}
+
+	get isListening() {
+		return !!this._unsubscribe;
+	}
+
+	get name() {
+		return this._document.get(rhit.FB_KEY_NAME);
+	}
+
+	get mode() {
+		return this._document.get(rhit.FB_KEY_MODE);
+	}
+
+	get pantry() {
+		return this._document.get(rhit.FB_KEY_PANTRY);
+	}
+
+	get intolerances() {
+		return this._document.get(rhit.FB_KEY_INTOLERANCES);
+	}
+}
+
+
+// Main
+rhit.main = function () {
+	console.log("Ready");
+
+	rhit.fbAuthManager = new rhit.FbAuthManager();
+	rhit.fbUserManager = new rhit.FbUserManager();
+
+	rhit.fbAuthManager.beginListening(() => {
+		console.log("isSignedIn = ", rhit.fbAuthManager.isSignedIn);
+
+		rhit.createUserObjectIfNeeded().then((isUserNew) => {
+			rhit.checkForRedirects();
+			rhit.initializePage();
+		});
+
+		
+
+	});
+};
+
+rhit.main();
